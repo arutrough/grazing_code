@@ -42,8 +42,17 @@ nrow(richness)
 
 #Take standared mean difference and SMD variance
 rich<-escalc(measure="SMD",m1i=TrtMean, m2i=CntrlMean,sd1i=sd_treat
-              ,sd2i=sd_cont,n1i=n.Trt,n2i=n.Cntrl, data=richness,
-              var.names=c("SMD","SMD_var"),digits=4)
+             ,sd2i=sd_cont,n1i=n.Trt,n2i=n.Cntrl, data=richness,
+             var.names=c("SMD","SMD_var"),digits=4)
+
+#Arrange by taxa
+rich<-rich[order(rich$Taxa),]
+head(rich$Taxa)
+
+##Check how many papers are used in the forest plot
+forest(rich$SMD,rich$SMD_var,slab=rich$AuthorYear,pch=19,main="PaperID")
+Papers<-unique(rich$AuthorYear)
+Papers
 
 ##Histogram of headge's d
 hist(rich$SMD, breaks=15, xlab="hedge's d", col=2, main="Species Richness")
@@ -66,4 +75,49 @@ ranef.model <- rma(SMD, SMD_var, data=rich, method = "HE")
 summary(ranef.model)
 plot(ranef.model)
 forest(ranef.model,slab=rich$Taxa)
+
+
+### Publication Bias analysis\
+
+#Funnel plot
+funnel(fixef.model)
+
+#Trim and fill to find gaps
+trimandfill <- trimfill(fixef.model)
+funnel(trimandfill) 
+
+#Fail-safe N
+?fsn
+fsn(yi=rich$SMD,vi=rich$SMD_var, data=rich, type="Rosenberg")
+plot(rich$year, rich$SMD) #scatterplot
+
+rich$Study.Year
+rich$SMD
+
+
+###Models
+
+###########Need to tell R which are dummy variables? 
+
+##Study variables
+##maximum likelihood (also, I-T model selection)
+ml.model.reduced <- rma(SMD ~ Taxa + PaperID, SMD_var, data=rich, method = "REML")
+summary(ml.model.reduced)
+
+#Variables in study disigen
+ml.model.study   <- rma(SMD ~ Taxa +PaperID + Season + EntireLength + StudyLength +Study.Year +SampleDesign, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study)
+
+#Variables in study disigen reduced
+ml.model.study.reduced   <- rma(SMD ~ Taxa + PaperID + EntireLength +Study.Year, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.reduced)
+
+#Variables in data entry
+ml.model.DataEntry  <- rma(SMD ~ Taxa + PaperID + Observer + Person.who.proofed + RawCalc, SMD_var, data=rich, method = "REML") 
+summary(ml.model.DataEntry)
+
+#Variables in data entry reduced
+ml.model.DataEntry.reduced  <- rma(SMD ~ Taxa + PaperID + Observer + Person.who.proofed + RawCalc, SMD_var, data=rich, method = "REML") 
+summary(ml.model.DataEntry.reduced)
+
 
