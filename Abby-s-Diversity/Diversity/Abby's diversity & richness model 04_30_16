@@ -1,0 +1,371 @@
+## Melica, Emily & Abby attempt code
+
+install.packages("googlesheets")
+library(googlesheets)
+
+##install metafor
+install.packages("metafor")
+require(metafor)
+
+setwd("C:\\Users\\alr569\\Desktop\\R code")
+
+#Authorize access to google sheets
+gs_auth(new_user=TRUE)
+
+##Download sheet from google
+my.sheet <- gs_title("Data Extraction")
+my.data <- data.frame(gs_read_csv(ss=my.sheet, ws="Data", is.na(TRUE)))
+head(my.data)
+
+##Subset to ritchness data
+richness<- subset(my.data,Response=="Richness")
+head(richness)
+
+#size of dataset
+dim(richness)
+
+#Calculate SD from Var
+richness$sd_cont
+richness$sd_cont<-(sqrt(richness$CntrlVar))
+head(richness$sd_cont)
+
+richness$sd_treat
+richness$sd_treat<-(sqrt(richness$TrtVar))
+head(richness$sd_treat)
+
+#Remove NAs
+richness <- richness[!is.na(richness$CntrlVar),]
+nrow(richness)
+richness <- richness[!is.na(richness$TrtMean),]
+nrow(richness)
+richness <- richness[!is.na(richness$nTrt),]
+nrow(richness)
+
+#Take standared mean difference and SMD variance
+rich<-escalc(measure="SMD",m1i=TrtMean, m2i=CntrlMean,sd1i=sd_treat
+             ,sd2i=sd_cont,n1i=nTrt,n2i=nCntrl, data=richness,
+             var.names=c("SMD","SMD_var"),digits=4)
+
+#Arrange by taxa
+rich<-rich[order(rich$Taxa),]
+head(rich$Taxa)
+
+##Check how many papers are used in the forest plot
+Papers<-unique(rich$AuthorYear)
+Papers<-as.data.frame(Papers)
+nrow(Papers)
+
+##Histogram of headge's d
+hist(rich$SMD, breaks=15, xlab="hedge's d", col=2, main="Species Richness")
+abline(v=0,col=4,lty=3,lwd=5)
+
+##Forest plot
+forest(rich$SMD,rich$SMD_var,slab=rich$Taxa,pch=19)
+
+##Fixed effects model of species richness with NA omitted
+?rma
+fixef.model.test <- rma(SMD, SMD_var, data=rich, method = "FE")
+
+summary(fixef.model.test)
+plot(fixef.model)
+forest(fixef.model,slab=rich$Taxa)
+
+
+##Random effects model of species richness with NA omitted
+ranef.model <- rma(SMD, SMD_var, data=rich, method = "HE")
+
+summary(ranef.model)
+plot(ranef.model)
+forest(ranef.model,slab=rich$Taxa)
+
+
+### Publication Bias analysis
+
+#Funnel plot
+funnel(fixef.model)
+
+#Trim and fill to find gaps
+trimandfill <- trimfill(fixef.model)
+funnel(trimandfill) 
+
+#Fail-safe N
+?fsn
+fsn(yi=rich$SMD,vi=rich$SMD_var, data=rich, type="Rosenberg")
+plot(rich$year, rich$SMD) #scatterplot
+
+rich$Study.Year
+richness$SMD
+
+plot(rich$StudyYear,rich$SMD)
+
+###Models
+
+##Study variables
+##maximum likelihood (also, I-T model selection)
+
+##Basic model with only Taxa ans Paper ID as moderators
+#check correlation
+boxplot(rich$SMD ~ rich$Taxa)
+boxplot(rich$SMD ~ rich$PaperID)
+
+ml.model.reduced <- rma(SMD ~ Taxa + PaperID, SMD_var, data=rich, method = "REML")
+summary(ml.model.reduced)
+
+ml.model.ID <- rma(SMD ~ PaperID, SMD_var, data=rich, method = "REML")
+summary(ml.model.ID)
+
+ml.model.taxa <- rma(SMD ~ Taxa, SMD_var, data=rich, method = "REML")
+summary(ml.model.taxa)
+
+
+#Variables in study disigen
+boxplot(rich$SMD ~ rich$Season)
+plot(rich$SMD ~ rich$EntireLength)
+plot(rich$SMD ~ rich$StudyLength)
+plot(rich$SMD ~ rich$StudyYear)
+boxplot(rich$SMD ~ rich$SampleDesign)
+
+plot(rich$EntireLength ~ rich$StudyLength)
+plot(rich$EntireLength ~ rich$StudyYear)
+plot(rich$StudyLength ~ rich$StudyYear)
+
+#Model all predictors
+ml.model.study.all   <- rma(SMD ~ Taxa +PaperID + Season + EntireLength + StudyLength +StudyYear +SampleDesign, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.all)
+
+#Model reduced predictors
+ml.model.study.reduced   <- rma(SMD ~ Taxa +PaperID +StudyYear +SampleDesign, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.reduced)
+
+#Variable=Year
+ml.model.study.year   <- rma(SMD ~ Taxa +PaperID + StudyYear, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.year)
+
+#Variable=sampling design
+ml.model.study.sampling   <- rma(SMD ~ Taxa + PaperID + SampleDesign, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.sampling)
+
+#Variable=Entire Length
+ml.model.study.EL   <- rma(SMD ~ Taxa + PaperID + EntireLength, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.EL)
+
+#Variable=Study Length
+ml.model.study.StudyLength   <- rma(SMD ~ Taxa + PaperID + StudyLength, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.StudyLength)
+
+#Variable=Season
+ml.model.study.Season   <- rma(SMD ~ Taxa + PaperID + Season, SMD_var, data=rich, method = "REML") 
+summary(ml.model.study.Season)
+
+
+
+#Variables in data entry
+
+#Correlations
+boxplot(rich$SMD ~ rich$Observer)
+boxplot(rich$SMD ~ rich$Person.who.proofed)
+boxplot(rich$SMD ~ rich$RawCalc)
+
+#All entry veriables
+ml.model.DataEntry  <- rma(SMD ~ Taxa + PaperID + Observer + Person.who.proofed + RawCalc, SMD_var, data=rich, method = "REML") 
+summary(ml.model.DataEntry)
+
+#Variables=Observers
+ml.model.DataEntry.obs <- rma(SMD ~ Taxa + PaperID + Observer, SMD_var, data=rich, method = "REML") 
+summary(ml.model.DataEntry.obs)
+
+#Variables=Proofer
+ml.model.DataEntry.proofer <- rma(SMD ~ Taxa + PaperID + Person.who.proofed, SMD_var, data=rich, method = "REML") 
+summary(ml.model.DataEntry.proofer)
+
+#Variables=RawCalc
+ml.model.DataEntry.RawCalc <- rma(SMD ~ Taxa + PaperID + RawCalc, SMD_var, data=rich, method = "REML") 
+summary(ml.model.DataEntry.RawCalc)
+
+##Habitat
+#Location
+ml.model.habitat.location <- rma(SMD ~ Taxa + PaperID +  LocationX + LocationY, SMD_var, data=rich, method = "REML") 
+summary(ml.model.habitat.location)
+
+
+
+## Melica, Emily & Abby attempt diversity code
+
+##Download sheet from google
+my.sheet <- gs_title("Data Extraction")
+my.data <- data.frame(gs_read_csv(ss=my.sheet, ws="Data", is.na(TRUE)))
+head(my.data)
+
+##Subset to diversity data
+diversity<-rbind(my.data[which(my.data$Response=="Shannon"),],
+                 my.data[which(my.data$Response=="Diversity"),],
+                 my.data[which(my.data$Response=="Shannon diversity"),])
+
+head(diversity)
+
+#size of dataset
+dim(diversity)
+
+#Calculate SD from Var
+diversity$sd_cont
+diversity$sd_cont<-(sqrt(diversity$CntrlVar))
+head(diversity$sd_cont)
+
+diversity$sd_treat
+diversity$sd_treat<-(sqrt(diversity$TrtVar))
+head(diversity$sd_treat)
+
+#Remove NAs
+diversity <- diversity[!is.na(diversity$CntrlVar),]
+nrow(diversity)
+diversity <- diversity[!is.na(diversity$TrtMean),]
+nrow(diversity)
+diversity <- diversity[!is.na(diversity$nTrt),]
+nrow(diversity)
+
+#Take standared mean difference and SMD variance
+div<-escalc(measure="SMD",m1i=TrtMean, m2i=CntrlMean,sd1i=sd_treat
+             ,sd2i=sd_cont,n1i=nTrt,n2i=nCntrl, data=diversity,
+             var.names=c("SMD","SMD_var"),digits=4)
+
+#Arrange by taxa
+div<-div[order(div$Taxa),]
+head(div$Taxa)
+
+##Check how many papers are used in the forest plot
+Papers<-unique(div$AuthorYear)
+Papers<-as.data.frame(Papers)
+nrow(Papers)
+
+##Histogram of headge's d
+hist(div$SMD, breaks=15, xlab="hedge's d", col=2, main="Species diversity")
+abline(v=0,col=4,lty=3,lwd=5)
+
+##Forest plot
+forest(div$SMD,div$SMD_var,slab=div$Taxa,pch=19)
+
+##Fixed effects model of species diversity with NA omitted
+fixef.model.test <- rma(SMD, SMD_var, data=div, method = "FE")
+
+summary(fixef.model.test)
+plot(fixef.model)
+forest(fixef.model,slab=div$Taxa)
+
+
+##Random effects model of species diversity with NA omitted
+ranef.model <- rma(SMD, SMD_var, data=div, method = "HE")
+
+summary(ranef.model)
+plot(ranef.model)
+forest(ranef.model,slab=div$Taxa)
+
+
+### Publication Bias analysis
+
+#Funnel plot
+funnel(fixef.model)
+
+#Trim and fill to find gaps
+trimandfill <- trimfill(fixef.model)
+funnel(trimandfill) 
+
+#Fail-safe N
+?fsn
+fsn(yi=div$SMD,vi=div$SMD_var, data=div, type="Rosenberg")
+plot(div$year, div$SMD) #scatterplot
+
+div$Study.Year
+diversity$SMD
+
+plot(div$StudyYear,div$SMD)
+
+###Models
+###########Need to tell R which are dummy variables? 
+
+##Study variables
+##maximum likelihood (also, I-T model selection)
+
+##Basic model with only Taxa ans Paper ID as moderators
+#check correlation
+boxplot(div$SMD ~ div$Taxa)
+boxplot(div$SMD ~ div$PaperID)
+
+ml.model.reduced <- rma(SMD ~ Taxa + PaperID, SMD_var, data=div, method = "REML")
+summary(ml.model.reduced)
+
+#Variables in study disigen
+boxplot(div$SMD ~ div$Season)
+plot(div$SMD ~ div$EntireLength)
+plot(div$SMD ~ div$StudyLength)
+plot(div$SMD ~ div$StudyYear)
+boxplot(div$SMD ~ div$SampleDesign)
+
+plot(div$EntireLength ~ div$StudyLength)
+plot(div$EntireLength ~ div$StudyYear)
+plot(div$StudyLength ~ div$StudyYear)
+
+#Model all predictors
+ml.model.study.all   <- rma(SMD ~ Taxa +PaperID + Season + EntireLength + StudyLength +StudyYear +SampleDesign, SMD_var, data=div, method = "REML") 
+summary(ml.model.study.all)
+
+#Model reduced predictors
+ml.model.study.reduced   <- rma(SMD ~ Taxa +PaperID +StudyYear +SampleDesign, SMD_var, data=div, method = "REML") 
+summary(ml.model.study.reduced)
+
+#Variable=Year
+ml.model.study.year   <- rma(SMD ~ Taxa +PaperID + StudyYear, SMD_var, data=div, method = "REML") 
+summary(ml.model.study.year)
+
+#Variable=sampling design
+ml.model.study.sampling   <- rma(SMD ~ Taxa + PaperID + SampleDesign, SMD_var, data=div, method = "REML") 
+summary(ml.model.study.sampling)
+
+#Variable=Entire Length
+ml.model.study.EL   <- rma(SMD ~ Taxa + PaperID + EntireLength, SMD_var, data=div, method = "REML") 
+summary(ml.model.study.EL)
+
+#Variable=Study Length
+ml.model.study.StudyLength   <- rma(SMD ~ Taxa + PaperID + StudyLength, SMD_var, data=div, method = "REML") 
+summary(ml.model.study.StudyLength)
+
+#Variable=Season
+ml.model.study.Season   <- rma(SMD ~ Taxa + PaperID + Season, SMD_var, data=div, method = "REML") 
+summary(ml.model.study.Season)
+
+
+
+#Variables in data entry
+
+#Correlations
+boxplot(div$SMD ~ div$Observer)
+boxplot(div$SMD ~ div$Person.who.proofed)
+boxplot(div$SMD ~ div$RawCalc)
+
+#All entry veriables
+ml.model.DataEntry  <- rma(SMD ~ Taxa + PaperID + Observer + Person.who.proofed + RawCalc, SMD_var, data=div, method = "REML") 
+summary(ml.model.DataEntry)
+
+#Variables=Observers
+ml.model.DataEntry.obs <- rma(SMD ~ Taxa + PaperID + Observer, SMD_var, data=div, method = "REML") 
+summary(ml.model.DataEntry.obs)
+
+#Variables=Proofer
+ml.model.DataEntry.proofer <- rma(SMD ~ Taxa + PaperID + Person.who.proofed, SMD_var, data=div, method = "REML") 
+summary(ml.model.DataEntry.proofer)
+
+#Variables=Proofer
+ml.model.DataEntry.proofed <- rma(SMD ~ Taxa + PaperID + Proofed, SMD_var, data=div, method = "REML") 
+summary(ml.model.DataEntry.proofed)
+
+#Variables=RawCalc
+ml.model.DataEntry.RawCalc <- rma(SMD ~ Taxa + PaperID + RawCalc, SMD_var, data=div, method = "REML") 
+summary(ml.model.DataEntry.RawCalc)
+
+##Habitat
+ml.model.habitat.riparian <- rma(SMD ~ Taxa + PaperID + Riparian, SMD_var, data=div, method = "REML") 
+summary(ml.model.habitat.riparian)
+
+
+ml.model.habitat.location <- rma(SMD ~ Taxa + PaperID + LocationX + LocationY, SMD_var, data=div, method = "REML") 
+summary(ml.model.habitat.location)
+
